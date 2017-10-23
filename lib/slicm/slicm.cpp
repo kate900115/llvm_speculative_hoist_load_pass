@@ -478,7 +478,8 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		errs()<<"inside the loop it->first: "<<*(it->first)<<"\n";
 		Instruction* splitInst = whereToSplit[it->first];
 		errs()<<"where to split: "<<*splitInst<<"\n";
-		BasicBlock* splitBlock = instBBMap[it->first];
+		BasicBlock* splitBlock = splitInst->getParent();
+
 		// create a flag at the end of the preheader for redoBB
 		Function* currentFunc = (Preheader->getParent());
 		AllocaInst *flag = new AllocaInst(Type::getInt1Ty(currentFunc->getEntryBlock().getContext()), "flag", currentFunc->getEntryBlock().getTerminator());
@@ -496,13 +497,13 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		}
 
  		// create load and CMP instruction before split instruction
-		errs()<<*splitInst<<"\n";
+		errs()<<"$$$$ split inst:"<<*splitInst<<"\n";
+		errs()<<"$$$$ "<<*splitInst->getParent()<<"\n";
 		LoadInst* LD = new LoadInst(flag, "flag", splitInst);
-		errs()<<*LD<<"\n";
-/*		// split the block
+		
+		// split the block
 		BasicBlock* redoBB = SplitBlock(splitBlock, LD->getNextNode(), this);	
 		redoBBMap[redoBB] = 1;
-
 
 		// create redo BB
 		BasicBlock* nextBB = SplitEdge(splitBlock, redoBB, this);
@@ -512,12 +513,24 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		// erase the original terminator
 		splitBlock->getTerminator()->eraseFromParent();
 
+
+		errs()<<"after split: redoBBis: \n";
+		errs()<<*redoBB<<"\n";
+		errs()<<"current bb is:\n";
+		errs()<<*splitBlock<<"\n";
+		errs()<<"rest bb is:\n";
+		errs()<<*nextBB<<"\n";
+
+
+
+
+
 		// copy the hoisted instruction into redoBB
 		vector<Instruction*> dependencyChain = it->second;
 		map <Instruction*, int> storeMap;
 		map <Instruction*, Instruction*> loadMap;
 		map <Instruction*, Instruction*> prehToRedo;
-
+/*
 		for (unsigned int i=0; i<dependencyChain.size(); i++){
 			// clone and insert into redo BB
 			Instruction* hoistedInst = dependencyChain[i]->clone();
