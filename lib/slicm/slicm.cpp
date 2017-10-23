@@ -502,7 +502,11 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			// need to add store and load instruction to save the value of the dest reg into a stack
 			// insert store in Preheader
 	//		AllocaInst *var = new AllocaInst(IntegerType::get(EntryBlock->getContext(),32), "var", dependencyChain[i]->getNextNode());
-			AllocaInst *var = new AllocaInst(IntegerType::get(currentFunc->getEntryBlock().getContext(),32), "var", currentFunc->getEntryBlock().getTerminator());
+			
+			
+		//	AllocaInst *var = new AllocaInst(IntegerType::get(currentFunc->getEntryBlock().getContext(),32), "var", currentFunc->getEntryBlock().getTerminator());
+
+			AllocaInst *var = new AllocaInst(dependencyChain[i]->getType(), "var", currentFunc->getEntryBlock().getTerminator());
 		//	var->setAlignment(4);
 			StoreInst *storeVar = new StoreInst(dependencyChain[i], var);
 			storeVar->insertAfter(dependencyChain[i]);
@@ -533,7 +537,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		}
 
 
-		// insert load
+		// insert load into redo BB and modify the dependency
 		for (map<Instruction*, Instruction*>::iterator it = loadMap.begin(); it!=loadMap.end(); it++){
 			Instruction* originalInst = it->first->getNextNode();
 			Instruction* toBeInsertInst = prehToRedo[originalInst];
@@ -545,14 +549,9 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 					
 					toBeInsertInst->setOperand(j,loadVar_redoBB);
 				}	
-			
 			}
-
 		}
 		StoreInst *STinRedo = new StoreInst(ConstantInt::getFalse(Preheader->getContext()), flag, redoBB->getTerminator());
-
-
-		
 	}
 
 
