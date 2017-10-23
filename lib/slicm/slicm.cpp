@@ -360,7 +360,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 	map<Instruction*, Instruction*> hoistedInstructions;//current inst, first load inst
 	map<Instruction*, BasicBlock*> instBBMap;
 	map<Instruction*, Instruction*> whereToSplit;
-	map<Instruction*, Instruction*> splitToLoad;
+	map<Instruction*, vector<Instruction*> > splitToLoad;
 
 	// hoist loads and get its dependency chain
 	for (Loop::block_iterator I = L->block_begin(), E = L->block_end(); I != E; ++I) {
@@ -383,15 +383,19 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 					hoistedInstructions[firstLoadInst] = firstLoadInst;
 					inst++;
 					
-					errs()<<*inst<<"\n";
-
 					// to check if the hoisted instruction is the split instruction
 					if (splitToLoad.find(firstLoadInst)!=splitToLoad.end()){
-						Instruction* key = splitToLoad[firstLoadInst];
+
+						vector<Instruction*> keys = splitToLoad[firstLoadInst];
+						for (unsigned int i=0; i<keys.size(); i++){
+							errs()<<"@@@@ There is a conflict: "<<*keys[i]<<","<<*firstLoadInst<<"\n";
+							whereToSplit.erase(keys[i]);
+							whereToSplit[keys[i]] = firstLoadInst->getNextNode();
+							errs()<<"@@@@ after change: "<<*keys[i]<<","<<*whereToSplit[keys[i]]<<"\n";
+
+						}
 						splitToLoad.erase(firstLoadInst);
-						splitToLoad[firstLoadInst->getNextNode()]=key;
-						whereToSplit.erase(key);
-						whereToSplit[key] = firstLoadInst->getNextNode();
+						splitToLoad[firstLoadInst->getNextNode()]=keys;
 					}
 					
 					hoist(*firstLoadInst);
@@ -401,7 +405,6 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 						for (Value::use_iterator UI = dependencyChain[i]->use_begin(); UI!=dependencyChain[i]->use_end(); UI++){
 							Instruction *User = dyn_cast<Instruction>(*UI);
 							if ((canSinkOrHoistLoadAndDependency(*User))&&(CurLoop->hasLoopInvariantOperands(User)) && isSafeToExecuteUnconditionally(*User)){
-								errs()<<"Hoist user\n";
 								for (unsigned int j=0; j<User->getNumOperands(); j++){
 									Value* tempV=User->getOperand(j);
 									Instruction* tempI = dyn_cast<Instruction>(tempV);
@@ -420,24 +423,38 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 
 								// to check if the hoisted instruction is the split instruction
 								if (splitToLoad.find(User)!=splitToLoad.end()){
-									Instruction* key = splitToLoad[User];
-									splitToLoad.erase(User);
-									splitToLoad[User->getNextNode()]=key;
-									whereToSplit.erase(key);
-									whereToSplit[key] = User->getNextNode();
-								}
 
+									vector<Instruction*> keys = splitToLoad[User];
+									for (unsigned int i=0; i<keys.size(); i++){
+										errs()<<"@@@@ There is a conflict: "<<*keys[i]<<","<<*User<<"\n";
+										whereToSplit.erase(keys[i]);
+										whereToSplit[keys[i]] = User->getNextNode();
+										errs()<<"@@@@ after change: "<<*keys[i]<<","<<*whereToSplit[keys[i]]<<"\n";
+									}
+
+									splitToLoad.erase(User);
+									splitToLoad[User->getNextNode()]=keys;
+
+								}
+								errs()<<"-----hoisted instructions: "<<*User<<"\n";
 								hoist(*User);
 							}					
 						}
 					}
-
 					dependChains[firstLoadInst] = dependencyChain;
 					instBBMap[firstLoadInst] = BB;
 
 					//record the split instruction of the first load
-					whereToSplit[firstLoadInst] = inst;					
-					splitToLoad[inst] = firstLoadInst;
+					whereToSplit[firstLoadInst] = inst;
+					if (splitToLoad.find(inst)==splitToLoad.end()){
+						vector<Instruction*> temp;
+						temp.push_back(firstLoadInst);
+						splitToLoad[inst] = temp;
+					}				
+					else{
+						splitToLoad[inst].push_back(firstLoadInst);
+					}	
+					errs()<<"what add to the map:"<<*firstLoadInst<<","<<*inst<<"\n";
 					
 				}
 				else{
@@ -447,10 +464,20 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		}
 	}
 
+	for(map<Instruction*, Instruction*>::iterator it = whereToSplit.begin(); it != whereToSplit.end(); it++){
+		errs()<<*it->first<<","<<*it->second<<"\n";
+	}
+
+	errs()<<"dependChain size: "<<dependChains.size()<<"\n";
+	for (map<Instruction*,vector<Instruction*> >::iterator it = dependChains.begin(); it!=dependChains.end(); it++){
+		errs()<<"it->first: "<<*(it->first)<<"\n";
+	}
+
 	// create redoBB, flag and so on...
 	for (map<Instruction*,vector<Instruction*> >::iterator it = dependChains.begin(); it!=dependChains.end(); it++){
-		errs()<<"aaaaaaaaaaaaaaaaaaaaaa\n";
+		errs()<<"inside the loop it->first: "<<*(it->first)<<"\n";
 		Instruction* splitInst = whereToSplit[it->first];
+		errs()<<"where to split: "<<*splitInst<<"\n";
 		BasicBlock* splitBlock = instBBMap[it->first];
 		// create a flag at the end of the preheader for redoBB
 		Function* currentFunc = (Preheader->getParent());
@@ -468,13 +495,14 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			StoreFlag->insertAfter(ICMP);	
 		}
 
-
  		// create load and CMP instruction before split instruction
+		errs()<<*splitInst<<"\n";
 		LoadInst* LD = new LoadInst(flag, "flag", splitInst);
-
-		// split the block
+		errs()<<*LD<<"\n";
+/*		// split the block
 		BasicBlock* redoBB = SplitBlock(splitBlock, LD->getNextNode(), this);	
 		redoBBMap[redoBB] = 1;
+
 
 		// create redo BB
 		BasicBlock* nextBB = SplitEdge(splitBlock, redoBB, this);
@@ -489,6 +517,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		map <Instruction*, int> storeMap;
 		map <Instruction*, Instruction*> loadMap;
 		map <Instruction*, Instruction*> prehToRedo;
+
 		for (unsigned int i=0; i<dependencyChain.size(); i++){
 			// clone and insert into redo BB
 			Instruction* hoistedInst = dependencyChain[i]->clone();
@@ -558,6 +587,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			}
 		}
 		StoreInst *STinRedo = new StoreInst(ConstantInt::getFalse(Preheader->getContext()), flag, redoBB->getTerminator());
+*/
 	}
 
 
