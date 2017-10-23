@@ -361,6 +361,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 	map<Instruction*, BasicBlock*> instBBMap;
 	map<Instruction*, Instruction*> whereToSplit;
 	map<Instruction*, vector<Instruction*> > splitToLoad;
+	vector<Instruction*> hoistLoadOrder;
 
 	// hoist loads and get its dependency chain
 	for (Loop::block_iterator I = L->block_begin(), E = L->block_end(); I != E; ++I) {
@@ -409,11 +410,11 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 									Value* tempV=User->getOperand(j);
 									Instruction* tempI = dyn_cast<Instruction>(tempV);
 									/////								
-									if ((tempI!=dependencyChain[i])&&(tempI!=NULL)){
+								//	if ((tempI!=dependencyChain[i])&&(tempI!=NULL)){
 										// need to insert User into another dependency Chain
-										Instruction* oldFirstLoad = hoistedInstructions[tempI];
-										dependChains[oldFirstLoad].push_back(User);
-									}
+								//		Instruction* oldFirstLoad = hoistedInstructions[tempI];
+								//		dependChains[oldFirstLoad].push_back(User);
+								//	}
 								}
 								dependencyChain.push_back(User);
 							
@@ -442,6 +443,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 						}
 					}
 					dependChains[firstLoadInst] = dependencyChain;
+					hoistLoadOrder.push_back(firstLoadInst);
 					instBBMap[firstLoadInst] = BB;
 
 					//record the split instruction of the first load
@@ -469,16 +471,28 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 	}
 
 	errs()<<"dependChain size: "<<dependChains.size()<<"\n";
-	for (map<Instruction*,vector<Instruction*> >::iterator it = dependChains.begin(); it!=dependChains.end(); it++){
-		errs()<<"it->first: "<<*(it->first)<<"\n";
+	for (int j=0; j<hoistLoadOrder.size(); j++){
+		errs()<<"it->first: "<<hoistLoadOrder[j]<<"\n";
+		errs()<<"it->second: \n";
+		for (int i=0; i<dependChains[hoistLoadOrder[j]].size(); i++){
+			errs()<<*(dependChains[hoistLoadOrder[j]][i])<<",";
+		}
+		errs()<<"\n";
 	}
 
 	// create redoBB, flag and so on...
-	for (map<Instruction*,vector<Instruction*> >::iterator it = dependChains.begin(); it!=dependChains.end(); it++){
-		errs()<<"inside the loop it->first: "<<*(it->first)<<"\n";
-		Instruction* splitInst = whereToSplit[it->first];
+//	for (map<Instruction*,vector<Instruction*> >::iterator it = dependChains.begin(); it!=dependChains.end(); it++){
+	for (unsigned int k=0; k<hoistLoadOrder.size(); k++){
+	//	errs()<<"inside the loop it->first: "<<*(it->first)<<"\n";
+	//	Instruction* splitInst = whereToSplit[it->first];
+	//	errs()<<"where to split: "<<*splitInst<<"\n";
+	//	BasicBlock* splitBlock = splitInst->getParent();
+
+		Instruction* splitInst = whereToSplit[hoistLoadOrder[k]];
 		errs()<<"where to split: "<<*splitInst<<"\n";
 		BasicBlock* splitBlock = splitInst->getParent();
+
+
 
 		// create a flag at the end of the preheader for redoBB
 		Function* currentFunc = (Preheader->getParent());
@@ -486,7 +500,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		StoreInst *ST = new StoreInst(ConstantInt::getFalse(Preheader->getContext()), flag, Preheader->getTerminator());
 
 		// create comparision instruction after all store instructions
-		Instruction* loadInst = it->first;
+		Instruction* loadInst = hoistLoadOrder[k];
 		Value* LoadRegValue = loadInst->getOperand(0);
 		for (unsigned int i=0; i<storeInstVec.size(); i++){
 			Instruction* storeInst = storeInstVec[i];
@@ -525,10 +539,11 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 
 
 
-		// copy the hoisted instruction into redoBB
-		vector<Instruction*> dependencyChain = it->second;
-		map <Instruction*, int> storeMap;
+		// copy the hoisted instruction into redoBB//zyuxuan
+		vector<Instruction*> dependencyChain = dependChains[hoistLoadOrder[k]];
+		map <Instruction*, int> storeMap; // to record the newly created store
 		map <Instruction*, Instruction*> loadMap;
+		map <Instruction*, Instruction*> loadUserMap;
 		map <Instruction*, Instruction*> prehToRedo;
 
 		for (unsigned int i=0; i<dependencyChain.size(); i++){
@@ -536,21 +551,9 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			Instruction* hoistedInst = dependencyChain[i]->clone();
 			redoBB->getInstList().insert(redoBB->getTerminator(), hoistedInst);
 			prehToRedo[dependencyChain[i]]=hoistedInst;
-			
-//			if (i!=0){
-//				for (unsigned int j=0; j<dependencyChain[i]->getNumOperands(); j++){
-//					Value* v = dependencyChain[i]->getOperand(j);
-//					Instruction* operandInst = dyn_cast<Instruction>(v);
-//					if (loadMap.find(operandInst)!=loadMap.end()){
-//						hoistedInst->setOperand(j,loadMap[operandInst]);
-//					}	
-//				}
-//			}
 
 			// need to add store and load instruction to save the value of the dest reg into a stack
 			// insert store in Preheader
-		//	AllocaInst *var = new AllocaInst(IntegerType::get(EntryBlock->getContext(),32), "var", dependencyChain[i]->getNextNode());	
-		//	AllocaInst *var = new AllocaInst(IntegerType::get(currentFunc->getEntryBlock().getContext(),32), "var", currentFunc->getEntryBlock().getTerminator());
 
 			AllocaInst *var = new AllocaInst(dependencyChain[i]->getType(), "var", currentFunc->getEntryBlock().getTerminator());
 			StoreInst *storeVar = new StoreInst(dependencyChain[i], var);
@@ -561,6 +564,8 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			StoreInst *storeVar2 = new StoreInst(hoistedInst, var);
 			storeVar2->insertAfter(hoistedInst);
 			storeMap[storeVar2] = 1;
+			
+			prehToRedo[storeVar] = storeVar2;
 
 			// all user of the hoisted instruction need to load var before use it 
 			for (Value::use_iterator UI = dependencyChain[i]->use_begin(); UI != dependencyChain[i]->use_end(); UI++){
@@ -572,8 +577,8 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 						LoadInst* loadVar = new LoadInst(var, "load var", User);
 						if (User->getParent()==Preheader){
 							loadMap[loadVar] = var;
+							loadUserMap[loadVar] = User;
 						}
-					//loadMap[loadVar] = loadVar_redoBB;
 						
 						User->setOperand(j, loadVar);
 					}
@@ -584,7 +589,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 
 		// insert load into redo BB and modify the dependency
 		for (map<Instruction*, Instruction*>::iterator it = loadMap.begin(); it!=loadMap.end(); it++){
-			Instruction* originalInst = it->first->getNextNode();
+			Instruction* originalInst = loadUserMap[it->first];
 			if (prehToRedo.find(originalInst)!=prehToRedo.end()){
 				Instruction* toBeInsertInst = prehToRedo[originalInst];
 				errs()<<"xxxxxxxxxx"<<*originalInst<<", "<<*toBeInsertInst<<"\n";
