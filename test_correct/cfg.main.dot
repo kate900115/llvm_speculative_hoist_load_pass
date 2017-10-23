@@ -1,0 +1,33 @@
+digraph "CFG for 'main' function" {
+	label="CFG for 'main' function";
+
+	Node0xfd5440 [shape=record,label="{entry:\l  %i = alloca i32, align 4\l  store i32 0, i32* %i, align 4\l  br label %for.cond\l}"];
+	Node0xfd5440 -> Node0xfd54a0;
+	Node0xfd54a0 [shape=record,label="{for.cond:                                         \l  %0 = load i32* %i, align 4\l  %cmp = icmp slt i32 %0, 100\l  br i1 %cmp, label %for.body, label %for.end\l|{<s0>T|<s1>F}}"];
+	Node0xfd54a0:s0 -> Node0xfc8520;
+	Node0xfd54a0:s1 -> Node0xfc85e0;
+	Node0xfc8520 [shape=record,label="{for.body:                                         \l  %1 = load i32* %i, align 4\l  %2 = load i32* %i, align 4\l  %idxprom = sext i32 %2 to i64\l  %arrayidx = getelementptr inbounds [100 x i32]* @a, i32 0, i64 %idxprom\l  store i32 %1, i32* %arrayidx, align 4\l  br label %for.inc\l}"];
+	Node0xfc8520 -> Node0xfc8580;
+	Node0xfc8580 [shape=record,label="{for.inc:                                          \l  %3 = load i32* %i, align 4\l  %inc = add nsw i32 %3, 1\l  store i32 %inc, i32* %i, align 4\l  br label %for.cond\l}"];
+	Node0xfc8580 -> Node0xfd54a0;
+	Node0xfc85e0 [shape=record,label="{for.end:                                          \l  store i32 0, i32* %i, align 4\l  %4 = load i32* getelementptr inbounds ([100 x i32]* @a, i32 0, i64 97), align 4\l  %add9 = add nsw i32 %4, 5\l  %mul = mul nsw i32 %add9, 3\l  br label %for.cond1\l}"];
+	Node0xfc85e0 -> Node0xfc8640;
+	Node0xfc8640 [shape=record,label="{for.cond1:                                        \l  %flag.0 = phi i1 [ false, %for.end ], [ %cmp4, %for.inc12 ]\l  %var9.0 = phi i32 [ %mul, %for.end ], [ %var9.1, %for.inc12 ]\l  %5 = load i32* %i, align 4\l  %cmp2 = icmp slt i32 %5, 100\l  br i1 %cmp2, label %for.body3, label %for.end14\l|{<s0>T|<s1>F}}"];
+	Node0xfc8640:s0 -> Node0xfc86a0;
+	Node0xfc8640:s1 -> Node0xfc6490;
+	Node0xfc86a0 [shape=record,label="{for.body3:                                        \l  %6 = load i32* %i, align 4\l  %idxprom4 = sext i32 %6 to i64\l  %arrayidx5 = getelementptr inbounds [100 x i32]* @a, i32 0, i64 %idxprom4\l  %7 = load i32* %arrayidx5, align 4\l  %cmp6 = icmp sgt i32 %7, 95\l  br i1 %cmp6, label %if.then, label %if.end\l|{<s0>T|<s1>F}}"];
+	Node0xfc86a0:s0 -> Node0xfc62b0;
+	Node0xfc86a0:s1 -> Node0xfc6310;
+	Node0xfc62b0 [shape=record,label="{if.then:                                          \l  %8 = load i32* %i, align 4\l  %add = add nsw i32 %8, 1\l  %idxprom7 = sext i32 %add to i64\l  %arrayidx8 = getelementptr inbounds [100 x i32]* @a, i32 0, i64 %idxprom7\l  store i32 1, i32* %arrayidx8, align 4\l  %cmp1 = icmp eq i32* %arrayidx8, getelementptr inbounds ([100 x i32]* @a, i32 0, i64 97)\l  br label %if.end\l}"];
+	Node0xfc62b0 -> Node0xfc6310;
+	Node0xfc6310 [shape=record,label="{if.end:                                           \l  %flag.1 = phi i1 [ %cmp1, %if.then ], [ %flag.0, %for.body3 ]\l  br i1 %flag.1, label %if.end.split, label %if.end.split.split\l|{<s0>T|<s1>F}}"];
+	Node0xfc6310:s0 -> Node0xfc6370;
+	Node0xfc6310:s1 -> Node0xfc63d0;
+	Node0xfc6370 [shape=record,label="{if.end.split:                                     \l  %9 = load i32* getelementptr inbounds ([100 x i32]* @a, i32 0, i64 97), align 4\l  %10 = add nsw i32 %9, 5\l  %11 = mul nsw i32 %10, 3\l  br label %if.end.split.split\l}"];
+	Node0xfc6370 -> Node0xfc63d0;
+	Node0xfc63d0 [shape=record,label="{if.end.split.split:                               \l  %var9.1 = phi i32 [ %11, %if.end.split ], [ %var9.0, %if.end ]\l  %12 = load i32* %i, align 4\l  %idxprom10 = sext i32 %12 to i64\l  %arrayidx11 = getelementptr inbounds [100 x i32]* @b, i32 0, i64 %idxprom10\l  store i32 %var9.1, i32* %arrayidx11, align 4\l  %cmp3 = icmp eq i32* %arrayidx11, getelementptr inbounds ([100 x i32]* @a, i32 0, i64 97)\l  br label %for.inc12\l}"];
+	Node0xfc63d0 -> Node0xfc6430;
+	Node0xfc6430 [shape=record,label="{for.inc12:                                        \l  %13 = load i32* %i, align 4\l  %inc13 = add nsw i32 %13, 1\l  store i32 %inc13, i32* %i, align 4\l  %cmp4 = icmp eq i32* %i, getelementptr inbounds ([100 x i32]* @a, i32 0, i64 97)\l  br label %for.cond1\l}"];
+	Node0xfc6430 -> Node0xfc8640;
+	Node0xfc6490 [shape=record,label="{for.end14:                                        \l  %14 = load i32* getelementptr inbounds ([100 x i32]* @b, i32 0, i64 97), align 4\l  %15 = load i32* getelementptr inbounds ([100 x i32]* @b, i32 0, i64 98), align 4\l  %16 = load i32* getelementptr inbounds ([100 x i32]* @b, i32 0, i64 99), align 4\l  %call = call i32 (i8*, ...)* @printf(i8* getelementptr inbounds ([12 x i8]* @.str, i32 0, i32 0), i32 %14, i32 %15, i32 %16)\l  ret i32 0\l}"];
+}
