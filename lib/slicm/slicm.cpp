@@ -382,27 +382,30 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 					dependencyChain.push_back(firstLoadInst);
 					hoistedInstructions[firstLoadInst] = firstLoadInst;
 					inst++;
+					
+					errs()<<*inst<<"\n";
 
 					// to check if the hoisted instruction is the split instruction
 					if (splitToLoad.find(firstLoadInst)!=splitToLoad.end()){
 						Instruction* key = splitToLoad[firstLoadInst];
 						splitToLoad.erase(firstLoadInst);
-						splitToLoad[++firstLoadInst]=key;
+						splitToLoad[firstLoadInst->getNextNode()]=key;
 						whereToSplit.erase(key);
-						whereToSplit[key] = ++firstLoadInst;
+						whereToSplit[key] = firstLoadInst->getNextNode();
 					}
+					
 					hoist(*firstLoadInst);
+		
 
 					for (unsigned int i=0; i<dependencyChain.size(); i++){
 						for (Value::use_iterator UI = dependencyChain[i]->use_begin(); UI!=dependencyChain[i]->use_end(); UI++){
 							Instruction *User = dyn_cast<Instruction>(*UI);
-							errs()<<"User is :"<<*User<<"\n";
 							if ((canSinkOrHoistLoadAndDependency(*User))&&(CurLoop->hasLoopInvariantOperands(User)) && isSafeToExecuteUnconditionally(*User)){
 								errs()<<"Hoist user\n";
 								for (unsigned int j=0; j<User->getNumOperands(); j++){
 									Value* tempV=User->getOperand(j);
 									Instruction* tempI = dyn_cast<Instruction>(tempV);
-																	
+									/////								
 									if ((tempI!=dependencyChain[i])&&(tempI!=NULL)){
 										// need to insert User into another dependency Chain
 										Instruction* oldFirstLoad = hoistedInstructions[tempI];
@@ -410,20 +413,22 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 									}
 								}
 								dependencyChain.push_back(User);
+							
 								hoistedInstructions[User] = firstLoadInst;
+							
 								if (User==inst) inst++;
 
 								// to check if the hoisted instruction is the split instruction
 								if (splitToLoad.find(User)!=splitToLoad.end()){
 									Instruction* key = splitToLoad[User];
 									splitToLoad.erase(User);
-									splitToLoad[++User]=key;
+									splitToLoad[User->getNextNode()]=key;
 									whereToSplit.erase(key);
-									whereToSplit[key] = ++User;
+									whereToSplit[key] = User->getNextNode();
 								}
 
 								hoist(*User);
-							}  					
+							}					
 						}
 					}
 
@@ -444,6 +449,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 
 	// create redoBB, flag and so on...
 	for (map<Instruction*,vector<Instruction*> >::iterator it = dependChains.begin(); it!=dependChains.end(); it++){
+		errs()<<"aaaaaaaaaaaaaaaaaaaaaa\n";
 		Instruction* splitInst = whereToSplit[it->first];
 		BasicBlock* splitBlock = instBBMap[it->first];
 		// create a flag at the end of the preheader for redoBB
