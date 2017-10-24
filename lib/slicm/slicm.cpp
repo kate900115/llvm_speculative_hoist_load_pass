@@ -409,12 +409,6 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 								for (unsigned int j=0; j<User->getNumOperands(); j++){
 									Value* tempV=User->getOperand(j);
 									Instruction* tempI = dyn_cast<Instruction>(tempV);
-									/////								
-								//	if ((tempI!=dependencyChain[i])&&(tempI!=NULL)){
-										// need to insert User into another dependency Chain
-								//		Instruction* oldFirstLoad = hoistedInstructions[tempI];
-								//		dependChains[oldFirstLoad].push_back(User);
-								//	}
 								}
 								dependencyChain.push_back(User);
 							
@@ -485,6 +479,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 
 	map <Instruction*, Instruction*> instVarMap;
 	map <Instruction*, Instruction*> prehToRedo;
+	map <Instruction*, Instruction*> firstLoadFlagMap;
 
 
 
@@ -527,22 +522,9 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		splitBlock->getTerminator()->eraseFromParent();
 
 
-		errs()<<"after split: redoBBis: \n";
-		errs()<<*redoBB<<"\n";
-		errs()<<"current bb is:\n";
-		errs()<<*splitBlock<<"\n";
-		errs()<<"rest bb is:\n";
-		errs()<<*nextBB<<"\n";
 
-
-
-
-
-		// copy the hoisted instruction into redoBB//zyuxuan
+		// copy the hoisted instruction into redoBB
 		vector<Instruction*> dependencyChain = dependChains[hoistLoadOrder[k]];
-		map <Instruction*, int> storeMap; // to record the newly created store
-		map <Instruction*, Instruction*> loadMap;
-		map <Instruction*, Instruction*> loadUserMap;
 		for (unsigned int i=0; i<dependencyChain.size(); i++){
 			// clone and insert into redo BB
 			Instruction* hoistedInst = dependencyChain[i]->clone();
@@ -555,36 +537,35 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			AllocaInst *var = new AllocaInst(dependencyChain[i]->getType(), "var", currentFunc->getEntryBlock().getTerminator());
 			StoreInst *storeVar = new StoreInst(dependencyChain[i], var);
 			storeVar->insertAfter(dependencyChain[i]);
-			storeMap[storeVar] = 1;
 			
 			instVarMap[dependencyChain[i]] = var;
 
 			// insert store in redo BB
 			StoreInst *storeVar2 = new StoreInst(hoistedInst, var);
 			storeVar2->insertAfter(hoistedInst);
-			storeMap[storeVar2] = 1;
-			
-	//		prehToRedo[storeVar] = storeVar2;
 
-/*			// all user of the hoisted instruction need to load var before use it 
-			for (Value::use_iterator UI = dependencyChain[i]->use_begin(); UI != dependencyChain[i]->use_end(); UI++){
-				Instruction *User = dyn_cast<Instruction>(*UI);
-				
-				for (unsigned int j =0; j!=User->getNumOperands(); j++){	
-					Instruction* temp = dyn_cast<Instruction>(User->getOperand(j));
-					if ((temp==dependencyChain[i])&&(storeMap.find(User)==storeMap.end())){
-						LoadInst* loadVar = new LoadInst(var, "load var", User);
-						if (User->getParent()==Preheader){
-							loadMap[loadVar] = var;
-							loadUserMap[loadVar] = User;
+			// insert load before user
+			for (Value::use_iterator UI = dependencyChain[i]->use_begin(); UI!=dependencyChain[i]->use_end(); UI++){
+				Instruction* User = dyn_cast<Instruction>(*UI);
+				if ((redoBBMap.find(User->getParent())==redoBBMap.end())&&(User->getParent()!=Preheader)){
+					errs()<<"~~~~~~~~~~~~**********\n";
+					for (unsigned int j=0; j!=User->getNumOperands(); j++){
+						Instruction* temp = dyn_cast<Instruction>(User->getOperand(j));
+						if (temp==dependencyChain[i]){
+							errs()<<"BB: "<<*User->getParent()<<"\n";
+							errs()<<"original user: "<<*User<<"\n";
+							LoadInst* ldvar = new LoadInst(var, "load", User);
+							User->setOperand(j, ldvar);
+							errs()<<"user: "<<*User<<"\n";
 						}
-						
-						User->setOperand(j, loadVar);
 					}
-				}	 
-			}*/
-		//	StoreInst *STinRedo = new StoreInst(ConstantInt::getFalse(Preheader->getContext()), flag, redoBB->getTerminator());
+				}
+			}
+			
 		}
+		StoreInst *STinRedo = new StoreInst(ConstantInt::getFalse(Preheader->getContext()), flag, redoBB->getTerminator());
+		firstLoadFlagMap[hoistLoadOrder[k]] = flag;
+		
 	}
 
 	// insert load in the redoBB before user
@@ -605,24 +586,6 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			}
 		}
 	}
-		// insert load into redo BB and modify the dependency
-//		for (map<Instruction*, Instruction*>::iterator it = loadMap.begin(); it!=loadMap.end(); it++){
-//			Instruction* originalInst = loadUserMap[it->first];
-//			if (prehToRedo.find(originalInst)!=prehToRedo.end()){
-//				Instruction* toBeInsertInst = prehToRedo[originalInst];
-//				errs()<<"xxxxxxxxxx"<<*originalInst<<", "<<*toBeInsertInst<<"\n";
-//				LoadInst* loadVar_redoBB = new LoadInst(it->second, "load_var", toBeInsertInst);
-//				for (unsigned int j=0; j<originalInst->getNumOperands(); j++){
-//					Value* v = toBeInsertInst->getOperand(j);
-//					Instruction* operandInst = dyn_cast<Instruction>(v);
-//					if (operandInst==it->first){
-//						
-//						toBeInsertInst->setOperand(j,loadVar_redoBB);
-//					}	
-//				}
-//			}
-//		}
-//	}
 
 
 	// FOR TEST: check the inst in the preheader
