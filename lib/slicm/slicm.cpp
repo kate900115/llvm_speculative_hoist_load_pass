@@ -357,7 +357,6 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 	
 
 	map<Instruction*,vector<Instruction*> > dependChains;//for BFS
-	map<Instruction*, Instruction*> hoistedInstructions;//current inst, first load inst
 	map<Instruction*, BasicBlock*> instBBMap;
 	map<Instruction*, Instruction*> whereToSplit;
 	map<Instruction*, vector<Instruction*> > splitToLoad;
@@ -381,7 +380,6 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			
 					vector<Instruction*> dependencyChain;
 					dependencyChain.push_back(firstLoadInst);
-					hoistedInstructions[firstLoadInst] = firstLoadInst;
 					inst++;
 					
 					// to check if the hoisted instruction is the split instruction
@@ -412,7 +410,6 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 								}
 								dependencyChain.push_back(User);
 							
-								hoistedInstructions[User] = firstLoadInst;
 							
 								if (User==inst) inst++;
 
@@ -548,15 +545,14 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			for (Value::use_iterator UI = dependencyChain[i]->use_begin(); UI!=dependencyChain[i]->use_end(); UI++){
 				Instruction* User = dyn_cast<Instruction>(*UI);
 				if ((redoBBMap.find(User->getParent())==redoBBMap.end())&&(User->getParent()!=Preheader)){
-					errs()<<"~~~~~~~~~~~~**********\n";
 					for (unsigned int j=0; j!=User->getNumOperands(); j++){
 						Instruction* temp = dyn_cast<Instruction>(User->getOperand(j));
 						if (temp==dependencyChain[i]){
-							errs()<<"BB: "<<*User->getParent()<<"\n";
-							errs()<<"original user: "<<*User<<"\n";
+						//	errs()<<"BB: "<<*User->getParent()<<"\n";
+						//	errs()<<"original user: "<<*User<<"\n";
 							LoadInst* ldvar = new LoadInst(var, "load", User);
 							User->setOperand(j, ldvar);
-							errs()<<"user: "<<*User<<"\n";
+						//	errs()<<"user: "<<*User<<"\n";
 						}
 					}
 				}
