@@ -15,4 +15,7 @@ g++ -o $filename.profile $filename.profile.ls.s /opt/llvm/Release+Asserts/lib/li
 opt -load Debug+Asserts/lib/slicm.so -lamp-inst-cnt -lamp-map-loop -lamp-load-profile -profile-loader -slicm $filename.bc -o $filename.slicm.bc
 opt -mem2reg $filename.slicm.bc -o $filename.slicmreg.bc
 llvm-dis $filename.slicm.bc
-opt -dot-cfg < $filename.slicmreg.bc >& /dev/null 
+llc $filename.bc -o $filename.s
+llc $filename.slicm.bc -o $filename.slicm.s
+g++ -o $filename $filename.s
+g++ -o $filename.slicm $filename.slicm.s

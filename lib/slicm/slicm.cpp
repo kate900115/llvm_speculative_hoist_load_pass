@@ -361,6 +361,9 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 	map<Instruction*, Instruction*> whereToSplit;
 	map<Instruction*, vector<Instruction*> > splitToLoad;
 	vector<Instruction*> hoistLoadOrder;
+	
+	map<Instruction*, Instruction*> instToFirstLoad;
+	map<Instruction*, int> firstLoadOrder;
 
 	// hoist loads and get its dependency chain
 	for (Loop::block_iterator I = L->block_begin(), E = L->block_end(); I != E; ++I) {
@@ -380,6 +383,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			
 					vector<Instruction*> dependencyChain;
 					dependencyChain.push_back(firstLoadInst);
+					instToFirstLoad[firstLoadInst] = firstLoadInst;
 					inst++;
 					
 					// to check if the hoisted instruction is the split instruction
@@ -409,6 +413,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 									Instruction* tempI = dyn_cast<Instruction>(tempV);
 								}
 								dependencyChain.push_back(User);
+								instToFirstLoad[User] = firstLoadInst;
 							
 							
 								if (User==inst) inst++;
@@ -477,8 +482,11 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 	map <Instruction*, Instruction*> instVarMap;
 	map <Instruction*, Instruction*> prehToRedo;
 	map <Instruction*, Instruction*> firstLoadFlagMap;
+	map <BasicBlock*, Instruction*> BBFlagMap;
 
-
+	for (unsigned int k=0; k<hoistLoadOrder.size(); k++){
+		firstLoadOrder[hoistLoadOrder[k]] = k;
+	}	
 
 	for (unsigned int k=0; k<hoistLoadOrder.size(); k++){
 		Instruction* splitInst = whereToSplit[hoistLoadOrder[k]];
@@ -561,6 +569,7 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		}
 		StoreInst *STinRedo = new StoreInst(ConstantInt::getFalse(Preheader->getContext()), flag, redoBB->getTerminator());
 		firstLoadFlagMap[hoistLoadOrder[k]] = flag;
+		BBFlagMap[redoBB] = flag;
 		
 	}
 
@@ -583,6 +592,36 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 		}
 	}
 
+	// find the dependency between basicblock
+	map < pair<BasicBlock*, BasicBlock*>,int> dependBBMap; //second depend on first
+	for (map<Instruction*, Instruction*>::iterator it = instToFirstLoad.begin(); it!=instToFirstLoad.end(); it++){
+		Instruction* currentInst = it->first;
+		// check all user to see if there is a User in another block after the current inst's block
+		for (Value::use_iterator UI = currentInst->use_begin(); UI!=currentInst->use_end(); UI++){
+			Instruction* User = dyn_cast<Instruction>(*UI);
+			// if User is in preheader
+			if (prehToRedo.find(User)!=prehToRedo.end()){
+				Instruction* redoInst = prehToRedo[User];
+				BasicBlock* redoBB = redoInst->getParent();
+				BasicBlock* currentRedo = prehToRedo[currentInst]->getParent();
+				Instruction* redoInstFirstLoad = instToFirstLoad[User];
+				int userOrder = firstLoadOrder[redoInstFirstLoad];
+				int currentOrder = firstLoadOrder[it->second];
+				if (userOrder>currentOrder){
+					pair<BasicBlock*, BasicBlock*> temp; 
+					temp.first = currentRedo;
+					temp.second = redoBB;
+					if (dependBBMap.find(temp)==dependBBMap.end()){
+						dependBBMap[temp] = 1;
+					}
+					errs()<<"first block"<<*currentRedo<<"\n";
+					errs()<<"second block"<<*redoBB<<"\n";
+					Instruction* flag = BBFlagMap[redoBB];
+					StoreInst *ST = new StoreInst(ConstantInt::getTrue(currentRedo->getContext()), flag, currentRedo->getTerminator());
+				}
+			}
+		}
+	}
 
 	// FOR TEST: check the inst in the preheader
 	errs()<<"check after the inst is hoisted into the preheader. now insts in the preheader are:\n";
