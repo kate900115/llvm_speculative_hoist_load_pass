@@ -505,8 +505,10 @@ bool slicm::runOnLoop(Loop *L, LPPassManager &LPM) {
 			Instruction* storeInst = storeInstVec[i];
 			Value* StoreRegValue = storeInst->getOperand(1);
 			ICmpInst* ICMP = new ICmpInst(storeInst->getNextNode(), ICmpInst::ICMP_EQ, StoreRegValue, LoadRegValue, "cmp");
-			StoreInst* StoreFlag = new StoreInst(ICMP, flag);
-			StoreFlag->insertAfter(ICMP);	
+			LoadInst* LoadFlag = new LoadInst(flag, "ldflag", ICMP->getNextNode());
+			BinaryOperator* newOr = BinaryOperator::Create(Instruction::Or, ICMP, LoadFlag, "or", LoadFlag->getNextNode());
+			StoreInst* StoreFlag = new StoreInst(newOr, flag);
+			StoreFlag->insertAfter(newOr);	
 		}
 
  		// create load and CMP instruction before split instruction
